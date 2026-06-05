@@ -20,6 +20,7 @@ import RPi.GPIO as GPIO
 
 from config import Config
 from motor import MotorDriver
+from pid import IncrementalPID
 from sensors import EncoderMeter, GyroYaw, LineGuard, UltrasonicKS103
 from vision import Blob, ColorCamera
 
@@ -52,6 +53,15 @@ class CubeSlalomController:
         self.orbit_start_cx: Optional[float] = None
         self.orbit_start_area: Optional[float] = None
         self.orbit_left_start_view = False
+        self.approach_pid = IncrementalPID(
+            cfg.VISION_KP, cfg.VISION_KI, cfg.VISION_KD, cfg.VISION_OUTPUT_LIMIT
+        )
+        self.avoid_pid = IncrementalPID(
+            cfg.AVOID_KP, cfg.AVOID_KI, cfg.AVOID_KD, cfg.AVOID_OUTPUT_LIMIT
+        )
+        self.orbit_pid = IncrementalPID(
+            cfg.ORBIT_KP, cfg.ORBIT_KI, cfg.ORBIT_KD, cfg.ORBIT_OUTPUT_LIMIT
+        )
 
     def run(self) -> None:
         try:
@@ -111,13 +121,14 @@ class CubeSlalomController:
             return
 
         if obstacle is None:
+            self.avoid_pid.reset()
             self.action = f"{color}_not_seen_forward"
             self.motor.drive(self._speed_by_distance(dist_cm), 0.0)
             return
 
         target_x = self.cfg.FRAME_W * (0.70 if pass_side == "left" else 0.30)
         err = (target_x - obstacle.cx) / (self.cfg.FRAME_W / 2.0)
-        w = self.cfg.AVOID_K * err
+        w = self.avoid_pid.update(err)
         if pass_side == "left" and obstacle.cx < self.cfg.FRAME_W * 0.48:
             w += 0.25
         if pass_side == "right" and obstacle.cx > self.cfg.FRAME_W * 0.52:
@@ -127,6 +138,7 @@ class CubeSlalomController:
 
     def _approach_green(self, green: Optional[Blob], dist_cm: float) -> None:
         if green is None:
+            self.approach_pid.reset()
             self.action = "green_not_seen_forward"
             self.motor.drive(self.cfg.SLOW_V, 0.0)
             return
@@ -142,8 +154,8 @@ class CubeSlalomController:
             self.set_state(State.ORBIT_GREEN)
             return
 
-        w = self._clip_unit(self.cfg.CENTER_K * center_err)
-        self.action = f"approach_green cx={green.cx:.0f} w={w:.2f}"
+        w = self._clip_unit(self.approach_pid.update(center_err))
+        self.action = f"approach_green cx={green.cx:.0f} err={center_err:.2f} w={w:.2f}"
         self.motor.drive(self._speed_by_distance(dist_cm), w)
 
     def _orbit_green(self, green: Optional[Blob], dist_cm: float, yaw: float) -> None:
@@ -152,6 +164,7 @@ class CubeSlalomController:
         target_x = self.cfg.FRAME_W * (0.72 if clockwise else 0.28)
 
         if green is None:
+            self.orbit_pid.reset()
             search_w = -0.55 if clockwise else 0.55
             self.action = f"orbit_search w={search_w:.2f}"
             self.motor.drive(0.12, search_w)
@@ -159,7 +172,7 @@ class CubeSlalomController:
             side_err = (target_x - green.cx) / (self.cfg.FRAME_W / 2.0)
             dist_err = self._orbit_distance_error(dist_cm)
             tangent_w = -0.38 if clockwise else 0.38
-            w = tangent_w + self.cfg.ORBIT_SIDE_K * side_err + dist_err
+            w = tangent_w + self.orbit_pid.update(side_err) + dist_err
             self.action = f"orbit_green cx={green.cx:.0f} w={self._clip_unit(w):.2f} yaw={yaw:.0f}"
             self.motor.drive(self.cfg.ORBIT_V, self._clip_unit(w))
 
@@ -252,6 +265,9 @@ class CubeSlalomController:
         print(f"{time.time():.2f}: {self.state.name} -> {state.name}")
         self.state = state
         self.state_t0 = time.time()
+        self.approach_pid.reset()
+        self.avoid_pid.reset()
+        self.orbit_pid.reset()
         if state == State.FINISH:
             self.motor.stop()
 

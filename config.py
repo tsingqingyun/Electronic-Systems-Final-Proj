@@ -80,6 +80,23 @@ class Config:
     ORBIT_DIST_K: float = 0.035
     BOUNDARY_K: float = 0.85
 
+    # Visual steering PID parameters. Error is normalized to roughly [-1, 1].
+    # These are intentionally mild because wheel PWM is still open-loop.
+    VISION_KP: float = 0.85
+    VISION_KI: float = 0.015
+    VISION_KD: float = 0.18
+    VISION_OUTPUT_LIMIT: float = 0.85
+
+    AVOID_KP: float = 0.95
+    AVOID_KI: float = 0.01
+    AVOID_KD: float = 0.12
+    AVOID_OUTPUT_LIMIT: float = 0.95
+
+    ORBIT_KP: float = 0.95
+    ORBIT_KI: float = 0.01
+    ORBIT_KD: float = 0.16
+    ORBIT_OUTPUT_LIMIT: float = 0.85
+
     # Fixed-task behavior.
     RED_PASS_SIDE: str = "left"
     YELLOW_PASS_SIDE: str = "right"

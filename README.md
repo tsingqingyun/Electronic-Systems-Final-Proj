@@ -8,6 +8,7 @@ Modular code for the fixed-position cube slalom task.
 - `main.py`: entry point.
 - `config.py`: all tunable parameters and GPIO assignments.
 - `controller.py`: finite-state machine and driving logic.
+- `pid.py`: incremental PID used by visual steering loops.
 - `motor.py`: motor GPIO/PWM driver.
 - `vision.py`: camera color detection.
 - `sensors.py`: ultrasonic, encoder, line guard, optional gyro helpers.
@@ -59,3 +60,15 @@ USE_GYRO = False
 ```
 
 Orbit completion therefore uses visual loop closure plus encoder progress.
+
+## Control Logic
+
+The code is based on the referenced `rubik-cube` repository structure, but
+keeps the verified hardware mapping of this car. Visual steering now uses
+incremental PID:
+
+```text
+APPROACH_GREEN -> PID keeps green cube near image center
+AVOID_RED/YELLOW -> PID shifts obstacle to the selected pass side
+ORBIT_GREEN -> PID keeps green cube at the orbit-side image position
+```

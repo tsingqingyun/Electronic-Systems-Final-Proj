@@ -1,0 +1,5 @@
+numpy
+opencv-python
+
+# Raspberry Pi hardware packages are usually installed by apt:
+# sudo apt install python3-rpi.gpio python3-smbus python3-opencv python3-numpy

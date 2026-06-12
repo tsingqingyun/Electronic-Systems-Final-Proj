@@ -6,7 +6,7 @@ Program entry point.
 
 Run this file on the Raspberry Pi to start the fixed-cube slalom task.
 All parameters are stored in config.py; the task state machine is in
-controller.py.
+control/controller.py.
 """
 
 from config import Config

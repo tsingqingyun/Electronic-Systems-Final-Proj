@@ -63,14 +63,16 @@ motion/
   pid.py
 ```
 
-The motion layer contains the low-level motor driver and incremental PID
-controller. The motor driver converts:
+The motion layer contains the low-level motor driver, visual steering PID,
+and independent left/right wheel-speed PID controllers. The motor driver
+converts:
 
 ```python
 motor.drive(v, w)
 ```
 
-into left/right wheel PWM values.
+into left/right wheel-speed targets. Encoder feedback then corrects each
+wheel's PWM duty independently.
 
 ```text
 perception/
@@ -158,6 +160,26 @@ left = BASE_DUTY * v - TURN_DUTY * w
 right = BASE_DUTY * v + TURN_DUTY * w
 ```
 
+These values are feed-forward PWM commands and also define the target wheel
+speeds:
+
+```text
+target speed = abs(feed-forward duty) / 100 * MAX_WHEEL_SPEED_CMPS
+```
+
+Every `MOTOR_PID_PERIOD_S`, GPIO6 and GPIO12 pulse increments are converted
+to measured left/right wheel speeds. Each wheel PID then computes:
+
+```text
+PWM = feed-forward PWM
+    + Kp * speed_error
+    + Ki * integrated_error
+    + Kd * error_rate
+```
+
+The encoder counters are cumulative. Resetting task progress only moves the
+distance origin, so it does not interrupt motor-speed measurement.
+
 Therefore:
 
 ```text
@@ -168,6 +190,20 @@ w < 0       -> turn the opposite direction
 ```
 
 `TURN_DUTY` controls how strongly `w` affects wheel-speed difference.
+
+Motor-speed PID tuning parameters are:
+
+```python
+MAX_WHEEL_SPEED_CMPS
+MOTOR_PID_PERIOD_S
+MOTOR_KP
+MOTOR_KI
+MOTOR_KD
+MOTOR_INTEGRAL_LIMIT
+```
+
+Tune `MAX_WHEEL_SPEED_CMPS` and `MOTOR_KP` first, then add a small `MOTOR_KI`.
+Keep `MOTOR_KD` small because encoder pulse measurements are discrete.
 
 If turning is weak, tune:
 
@@ -230,8 +266,8 @@ PID is used in:
 
 ```text
 APPROACH_GREEN
-AVOID_RED
-AVOID_YELLOW
+PASS_RED
+PASS_YELLOW
 ORBIT_GREEN
 ```
 
@@ -267,89 +303,78 @@ ORBIT_OUTPUT_LIMIT
 The controller states are:
 
 ```text
-AVOID_RED
+FIND_RED
+PASS_RED
+CLEAR_RED
+FIND_GREEN
 APPROACH_GREEN
 ORBIT_GREEN
-EXIT_ORBIT
-AVOID_YELLOW
+EXIT_GREEN
+FIND_YELLOW
+PASS_YELLOW
+CLEAR_YELLOW
+RECOVERY
 FINISH
 ```
 
-### AVOID_RED
-
-Purpose:
+Transitions follow four rules:
 
 ```text
-avoid the red cube
+the target must be visually identified
+the condition must hold for consecutive frames
+encoder distance must prove clearance where required
+timeout enters RECOVERY instead of proving completion
 ```
 
-If red is visible, the car shifts its path so that it passes on:
+### Red Cube
+
+```text
+FIND_RED
+  red is visible for TARGET_CONFIRM_FRAMES
+  -> PASS_RED
+
+PASS_RED
+  red has been stably seen
+  + red has reached the near zone
+  + red has moved to the expected image edge
+  + red is then missing for TARGET_LOST_FRAMES
+  -> CLEAR_RED
+
+CLEAR_RED
+  encoder progress >= RED_CLEAR_CM
+  -> FIND_GREEN
+```
+
+The configured red pass side is:
 
 ```python
 RED_PASS_SIDE = "left"
 ```
 
-If green becomes the dominant target, the state changes to:
+For a left-side pass, the red cube is controlled toward the right edge of the
+camera image.
+
+### Green Cube
 
 ```text
-APPROACH_GREEN
+FIND_GREEN
+  green is visible for TARGET_CONFIRM_FRAMES
+  -> APPROACH_GREEN
 ```
 
-### APPROACH_GREEN
-
-Purpose:
+`APPROACH_GREEN` uses visual PID to center the green cube. Entry to orbit
+requires all of the following for consecutive frames:
 
 ```text
-center the green cube and approach it
+green is visually present
+green is within GREEN_CENTER_TOL_PX of image center
+green area is large enough or ultrasonic distance is close enough
 ```
 
-The visual error is:
+Ultrasonic distance is only supporting evidence here; it cannot identify the
+green cube by itself.
 
-```python
-center_err = (FRAME_W / 2 - green.cx) / (FRAME_W / 2)
-```
-
-PID converts this error into steering command `w`.
-
-The car enters orbit when:
-
-```text
-green area is large enough
-or
-ultrasonic distance < GREEN_ORBIT_ENTER_CM
-```
-
-When orbit begins, the code records:
-
-```text
-green starting cx
-green starting area
-encoder progress = 0
-```
-
-### ORBIT_GREEN
-
-Purpose:
-
-```text
-orbit around the green cube once
-```
-
-Current direction:
-
-```python
-ORBIT_DIRECTION = "clockwise"
-```
-
-For clockwise orbit, the target green-cube position is:
-
-```python
-target_x = FRAME_W * 0.72
-```
-
-That keeps the green cube on the side of the image while the car moves around it.
-
-Orbit steering combines:
+`ORBIT_GREEN` combines:
 
 ```text
 fixed tangent turn
@@ -357,73 +382,64 @@ visual PID side-position correction
 ultrasonic distance correction
 ```
 
-The code does not use a gyro. Orbit completion uses:
-
-```text
-visual loop closure + encoder progress
-```
-
-It considers the orbit complete when:
+Without a gyro, orbit completion requires:
 
 ```text
 the car has left the starting visual view
-and
 encoder progress >= ORBIT_MIN_PROGRESS_CM
-and
 green cube appears again near the starting cx
-and
 green area ratio is within the configured range
+the complete condition holds for ORBIT_CONFIRM_FRAMES
 ```
 
-Relevant parameters:
-
-```python
-ORBIT_MIN_PROGRESS_CM
-ORBIT_LOOP_CX_TOL
-ORBIT_LOOP_AREA_MIN_RATIO
-ORBIT_LOOP_AREA_MAX_RATIO
-ORBIT_TIMEOUT_S
-```
-
-### EXIT_ORBIT
-
-Purpose:
+After a confirmed orbit:
 
 ```text
-leave the green cube after completing the orbit
+EXIT_GREEN
+  encoder progress >= GREEN_EXIT_CM
+  + green is missing for TARGET_LOST_FRAMES
+  -> FIND_YELLOW
 ```
 
-The car drives forward until it sees yellow, then switches to:
+### Yellow Cube
 
 ```text
-AVOID_YELLOW
+FIND_YELLOW
+  yellow is visible for TARGET_CONFIRM_FRAMES
+  -> PASS_YELLOW
+
+PASS_YELLOW
+  yellow has been stably seen
+  + yellow has reached the near zone
+  + yellow has moved to the expected image edge
+  + yellow is then missing for TARGET_LOST_FRAMES
+  -> CLEAR_YELLOW
+
+CLEAR_YELLOW
+  encoder progress >= YELLOW_CLEAR_CM
+  -> FINISH
 ```
 
-### AVOID_YELLOW
-
-Purpose:
-
-```text
-avoid the yellow cube and finish the course
-```
-
-Yellow pass side:
+The configured yellow pass side is:
 
 ```python
 YELLOW_PASS_SIDE = "right"
 ```
 
-After yellow disappears, the car continues forward for:
+For a right-side pass, the yellow cube is controlled toward the left edge of
+the camera image.
 
-```python
-POST_YELLOW_CLEAR_S
-```
+### Recovery
 
-Then it enters:
+If a required target is not found, a maneuver times out, or an encoder needed
+to prove clearance is unavailable, the controller enters:
 
 ```text
-FINISH
+RECOVERY
 ```
+
+`RECOVERY` stops the motors and records the failure reason. Time is used only
+to detect a stuck state; it is not treated as successful task completion.
 
 ## 8. Ultrasonic Safety
 
@@ -431,13 +447,14 @@ Before executing state-specific logic, the controller checks:
 
 ```python
 if dist_cm < STOP_CM:
-    motor.drive(0.0, 0.75)
+    motor.drive(0.0, emergency_turn_direction)
 ```
 
 Meaning:
 
 ```text
-if something is too close, stop forward motion and turn away
+if something is too close, stop forward motion and turn toward the configured
+pass direction for the current course stage
 ```
 
 Current threshold:

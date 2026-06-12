@@ -11,6 +11,7 @@ guard, wheel encoder progress meter, and optional MPU6050 gyro reader.
 from __future__ import annotations
 
 import time
+import threading
 from typing import Optional, Tuple
 
 import RPi.GPIO as GPIO
@@ -76,6 +77,9 @@ class EncoderMeter:
         self.cfg = cfg
         self.left_count = 0
         self.right_count = 0
+        self.left_origin = 0
+        self.right_origin = 0
+        self.lock = threading.Lock()
         self.available = False
         pins = [p for p in [cfg.ENCODER_LEFT, cfg.ENCODER_RIGHT] if p is not None]
         if not pins:
@@ -91,19 +95,29 @@ class EncoderMeter:
             self.available = False
 
     def _on_pulse(self, channel: int) -> None:
-        if channel == self.cfg.ENCODER_LEFT:
-            self.left_count += 1
-        elif channel == self.cfg.ENCODER_RIGHT:
-            self.right_count += 1
+        with self.lock:
+            if channel == self.cfg.ENCODER_LEFT:
+                self.left_count += 1
+            elif channel == self.cfg.ENCODER_RIGHT:
+                self.right_count += 1
 
     def reset(self) -> None:
-        self.left_count = 0
-        self.right_count = 0
+        with self.lock:
+            self.left_origin = self.left_count
+            self.right_origin = self.right_count
+
+    def counts(self) -> Tuple[int, int]:
+        """Return lifetime left/right pulse counts without resetting them."""
+        with self.lock:
+            return self.left_count, self.right_count
 
     def progress_cm(self) -> float:
         if not self.available:
             return 0.0
-        pulses = (self.left_count + self.right_count) / 2.0
+        with self.lock:
+            left = self.left_count - self.left_origin
+            right = self.right_count - self.right_origin
+        pulses = (left + right) / 2.0
         return pulses / self.cfg.ENCODER_PULSES_PER_REV * self.cfg.WHEEL_CIRCUMFERENCE_CM
 
     def close(self) -> None:

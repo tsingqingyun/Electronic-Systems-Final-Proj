@@ -70,6 +70,12 @@ class Config:
     TURN_DUTY: float = 22.0
     MIN_DUTY: float = 0.0
     MAX_DUTY: float = 70.0
+    MAX_WHEEL_SPEED_CMPS: float = 25.0
+    MOTOR_PID_PERIOD_S: float = 0.10
+    MOTOR_KP: float = 2.0
+    MOTOR_KI: float = 0.8
+    MOTOR_KD: float = 0.05
+    MOTOR_INTEGRAL_LIMIT: float = 20.0
     CRUISE_V: float = 0.55
     SLOW_V: float = 0.30
     AVOID_V: float = 0.32
@@ -81,7 +87,6 @@ class Config:
     BOUNDARY_K: float = 0.85
 
     # Visual steering PID parameters. Error is normalized to roughly [-1, 1].
-    # These are intentionally mild because wheel PWM is still open-loop.
     VISION_KP: float = 0.85
     VISION_KI: float = 0.015
     VISION_KD: float = 0.18
@@ -103,16 +108,34 @@ class Config:
     ORBIT_DIRECTION: str = "clockwise"
     ORBIT_TARGET_DEG: float = 360.0
     ORBIT_TIMEOUT_S: float = 16.0
-    ORBIT_TIME_FALLBACK_S: float = 10.5
+
+    # State-transition confirmation. A transition is never based on one frame.
+    TARGET_CONFIRM_FRAMES: int = 5
+    TARGET_LOST_FRAMES: int = 8
+    ORBIT_CONFIRM_FRAMES: int = 5
+    GREEN_CENTER_TOL_PX: float = 75.0
+    GREEN_APPROACH_AREA_RATIO: float = 0.055
+    PASS_NEAR_AREA_RATIO: float = 0.035
+    PASS_NEAR_CM: float = 30.0
+    PASS_EDGE_RATIO: float = 0.72
+
+    # Encoder-confirmed clearance distances.
+    RED_CLEAR_CM: float = 25.0
+    GREEN_EXIT_CM: float = 25.0
+    YELLOW_CLEAR_CM: float = 25.0
+
+    # Time only detects a stuck state; it never proves task completion.
+    FIND_TARGET_TIMEOUT_S: float = 18.0
+    PASS_CUBE_TIMEOUT_S: float = 14.0
+    APPROACH_GREEN_TIMEOUT_S: float = 18.0
+    CLEAR_CUBE_TIMEOUT_S: float = 8.0
+    EXIT_GREEN_TIMEOUT_S: float = 10.0
 
     # Visual loop-closure settings for orbit completion without a gyro.
     ORBIT_MIN_PROGRESS_CM: float = 80.0
     ORBIT_LOOP_CX_TOL: float = 75.0
     ORBIT_LOOP_AREA_MIN_RATIO: float = 0.45
     ORBIT_LOOP_AREA_MAX_RATIO: float = 2.20
-
-    POST_YELLOW_CLEAR_S: float = 4.0
-    NEXT_TARGET_DOMINANCE: float = 1.5
 
     def __post_init__(self) -> None:
         if self.HSV_RANGES is None:

@@ -16,7 +16,7 @@ control/
   course state machine and task decisions
 
 motion/
-  motor GPIO/PWM actuation and steering PID
+  differential drive, visual steering PID, and per-wheel speed PID
 
 perception/
   camera, ultrasonic, encoders, line guard, and optional gyro
@@ -74,15 +74,36 @@ USE_GYRO = False
 ```
 
 Orbit completion therefore uses visual loop closure plus encoder progress.
+The same cumulative encoder counts also provide left/right speed feedback;
+task-distance resets do not clear the motor PID counters.
 
 ## Control Logic
 
 The code follows the referenced `rubik-cube` repository structure, but keeps
-the verified hardware mapping of this car. Visual steering uses incremental
-PID:
+the verified hardware mapping of this car. Visual steering produces the turn
+command, then independent left/right speed PID controllers use encoder feedback
+to correct PWM duty.
 
 ```text
-APPROACH_GREEN -> PID keeps green cube near image center
-AVOID_RED/YELLOW -> PID shifts obstacle to the selected pass side
-ORBIT_GREEN -> PID keeps green cube at the orbit-side image position
+FIND_RED
+  -> PASS_RED
+  -> CLEAR_RED
+  -> FIND_GREEN
+  -> APPROACH_GREEN
+  -> ORBIT_GREEN
+  -> EXIT_GREEN
+  -> FIND_YELLOW
+  -> PASS_YELLOW
+  -> CLEAR_YELLOW
+  -> FINISH
 ```
+
+Every visual transition requires consecutive-frame confirmation. Passing a
+cube requires evidence that it was seen, approached, moved to the expected
+image edge, and then disappeared for several frames. Encoder distance confirms
+that the whole chassis has cleared the cube.
+
+Ultrasonic distance never identifies a cube by itself. It is only used as
+supporting evidence while the expected visual target is visible. State timeout
+enters `RECOVERY` and stops the car instead of pretending that the state
+completed successfully.

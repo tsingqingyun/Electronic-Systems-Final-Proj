@@ -13,7 +13,7 @@ import time
 import RPi.GPIO as GPIO
 
 from config import Config
-from motor import MotorDriver
+from motion import MotorDriver
 
 
 TEST_SECONDS = 1.2

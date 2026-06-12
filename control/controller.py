@@ -19,10 +19,8 @@ from typing import Dict, Optional
 import RPi.GPIO as GPIO
 
 from config import Config
-from motor import MotorDriver
-from pid import IncrementalPID
-from sensors import EncoderMeter, GyroYaw, LineGuard, UltrasonicKS103
-from vision import Blob, ColorCamera
+from motion import IncrementalPID, MotorDriver
+from perception import Blob, ColorCamera, EncoderMeter, GyroYaw, LineGuard, UltrasonicKS103
 
 
 class State(Enum):

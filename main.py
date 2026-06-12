@@ -10,7 +10,7 @@ controller.py.
 """
 
 from config import Config
-from controller import CubeSlalomController
+from control import CubeSlalomController
 
 
 def main() -> None:

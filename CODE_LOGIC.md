@@ -25,7 +25,7 @@ no MPU6050 gyro
 no line sensor in this code
 ```
 
-## 2. File Responsibilities
+## 2. Project Structure
 
 ```text
 main.py
@@ -37,7 +37,7 @@ Program entry point. It creates `Config`, creates `CubeSlalomController`, and st
 config.py
 ```
 
-All tunable parameters:
+The single source of truth for all tunable parameters:
 
 - GPIO pins
 - motor speed and turn strength
@@ -47,17 +47,24 @@ All tunable parameters:
 - encoder calibration
 - orbit completion thresholds
 
+Hardware pin values remain those of this repository and are not imported from
+the reference `rubik-cube` repository.
+
 ```text
-controller.py
+control/
+  controller.py
 ```
 
 High-level state machine and task logic. It decides what the car should do based on camera detections, ultrasonic distance, encoder progress, and current state.
 
 ```text
-motor.py
+motion/
+  motor.py
+  pid.py
 ```
 
-Low-level motor driver. It converts:
+The motion layer contains the low-level motor driver and incremental PID
+controller. The motor driver converts:
 
 ```python
 motor.drive(v, w)
@@ -66,29 +73,20 @@ motor.drive(v, w)
 into left/right wheel PWM values.
 
 ```text
-vision.py
+perception/
+  vision.py
+  sensors.py
 ```
 
-Camera color recognition. It detects red, green, and yellow cubes using HSV threshold segmentation and returns each cube's center position and area.
+The perception layer contains camera color recognition and sensor helpers:
 
-```text
-sensors.py
-```
-
-Sensor helpers:
-
+- red, green, and yellow HSV detection
 - KS103 ultrasonic reader
 - encoder progress meter
 - optional line guard
 - optional MPU6050 gyro reader
 
 The gyro path is present but disabled because this car does not have a gyro.
-
-```text
-pid.py
-```
-
-Incremental PID controller for visual steering.
 
 ```text
 gpio_motor_test.py
@@ -471,7 +469,7 @@ cd /home/pi/workspace/final_proj
 Syntax check:
 
 ```bash
-python3 -m py_compile config.py pid.py motor.py vision.py sensors.py controller.py main.py gpio_motor_test.py turn_sweep_test.py
+python3 -m compileall -q control motion perception config.py main.py gpio_motor_test.py turn_sweep_test.py
 ```
 
 Motor wiring test:

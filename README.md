@@ -3,17 +3,31 @@
 Function:
 Modular code for the fixed-position cube slalom task.
 
-## Files
+## Structure
 
-- `main.py`: entry point.
-- `config.py`: all tunable parameters and GPIO assignments.
-- `controller.py`: finite-state machine and driving logic.
-- `pid.py`: incremental PID used by visual steering loops.
-- `motor.py`: motor GPIO/PWM driver.
-- `vision.py`: camera color detection.
-- `sensors.py`: ultrasonic, encoder, line guard, optional gyro helpers.
-- `gpio_motor_test.py`: standalone motor wiring test.
-- `requirements.txt`: Python dependency notes.
+The runtime follows the same layered organization as the reference
+`rubik-cube` project:
+
+```text
+main.py
+  program entry point
+
+control/
+  course state machine and task decisions
+
+motion/
+  motor GPIO/PWM actuation and steering PID
+
+perception/
+  camera, ultrasonic, encoders, line guard, and optional gyro
+
+config.py
+  the single source of truth for GPIO pins and tuning parameters
+```
+
+Hardware assignments were not copied from the reference repository. All motor,
+encoder, I2C, camera, and optional sensor settings continue to come from this
+repository's `Config`.
 
 ## Run
 
@@ -63,9 +77,9 @@ Orbit completion therefore uses visual loop closure plus encoder progress.
 
 ## Control Logic
 
-The code is based on the referenced `rubik-cube` repository structure, but
-keeps the verified hardware mapping of this car. Visual steering now uses
-incremental PID:
+The code follows the referenced `rubik-cube` repository structure, but keeps
+the verified hardware mapping of this car. Visual steering uses incremental
+PID:
 
 ```text
 APPROACH_GREEN -> PID keeps green cube near image center

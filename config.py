@@ -45,9 +45,8 @@ class Config:
     ULTRA_CMD_MM: int = 0xB0
     STOP_CM: float = 12.0
     SLOW_CM: float = 32.0
-    GREEN_ORBIT_ENTER_CM: float = 24.0
-    GREEN_ORBIT_MIN_CM: float = 15.0
-    GREEN_ORBIT_MAX_CM: float = 34.0
+    GREEN_ORBIT_RADIUS_CM: float = 29.0
+    GREEN_ORBIT_RADIUS_TOL_CM: float = 3.0
 
     # Camera and vision.
     CAM_INDEX: int = 0
@@ -77,7 +76,6 @@ class Config:
     CLEAR_V: float = 0.40
     AVOID_V: float = 0.32
     ORBIT_V: float = 0.34
-    ORBIT_DIST_K: float = 0.035
     BOUNDARY_K: float = 0.85
 
     # Visual steering PID parameters. Error is normalized to roughly [-1, 1].
@@ -86,49 +84,40 @@ class Config:
     VISION_KD: float = 0.18
     VISION_OUTPUT_LIMIT: float = 0.85
 
-    AVOID_KP: float = 0.95
-    AVOID_KI: float = 0.01
-    AVOID_KD: float = 0.12
-    AVOID_OUTPUT_LIMIT: float = 0.95
-
-    ORBIT_KP: float = 0.95
-    ORBIT_KI: float = 0.01
-    ORBIT_KD: float = 0.16
-    ORBIT_OUTPUT_LIMIT: float = 0.85
-
     # Fixed-task behavior.
     RED_PASS_SIDE: str = "left"
+    GREEN_PASS_SIDE: str = "left"
     YELLOW_PASS_SIDE: str = "right"
     ORBIT_DIRECTION: str = "clockwise"
-    ORBIT_TIMEOUT_S: float = 16.0
 
     # State-transition confirmation. A transition is never based on one frame.
     TARGET_CONFIRM_FRAMES: int = 5
     TARGET_LOST_FRAMES: int = 8
-    ORBIT_CONFIRM_FRAMES: int = 5
     GREEN_CENTER_TOL_PX: float = 75.0
     GREEN_APPROACH_AREA_RATIO: float = 0.055
     PASS_NEAR_AREA_RATIO: float = 0.035
     PASS_NEAR_CM: float = 30.0
-    PASS_EDGE_RATIO: float = 0.72
 
-    # Encoder-confirmed clearance distances.
-    RED_CLEAR_CM: float = 25.0
-    GREEN_EXIT_CM: float = 25.0
-    YELLOW_CLEAR_CM: float = 25.0
+    # Symmetric lane change: move aside, pass, then return to the start-finish line.
+    AVOID_TURN_W: float = 0.24
+    AVOID_ARC_CM: float = 16.0
+    AVOID_PASS_CM: float = 30.0
+    AVOID_CLEAR_CM: float = 20.0
+
+    # Green orbit: one regular octagon, then the same lane-change exit.
+    GREEN_ORBIT_SEGMENTS: int = 8
+    GREEN_ENTRY_TURN_CM: float = 10.5
+    GREEN_CORNER_TURN_CM: float = 7.0
+    GREEN_ORBIT_LEG_CM: float = 22.0
+    GREEN_TURN_W: float = 0.72
+    GREEN_RANGE_V: float = 0.18
 
     # Time only detects a stuck state; it never proves task completion.
     FIND_TARGET_TIMEOUT_S: float = 18.0
     PASS_CUBE_TIMEOUT_S: float = 14.0
-    APPROACH_GREEN_TIMEOUT_S: float = 18.0
+    MANEUVER_TIMEOUT_S: float = 12.0
+    ORBIT_TOTAL_TIMEOUT_S: float = 120.0
     CLEAR_CUBE_TIMEOUT_S: float = 20.0
-    EXIT_GREEN_TIMEOUT_S: float = 20.0
-
-    # Visual loop-closure settings for orbit completion.
-    ORBIT_MIN_PROGRESS_CM: float = 80.0
-    ORBIT_LOOP_CX_TOL: float = 75.0
-    ORBIT_LOOP_AREA_MIN_RATIO: float = 0.45
-    ORBIT_LOOP_AREA_MAX_RATIO: float = 2.20
 
     def __post_init__(self) -> None:
         if self.HSV_RANGES is None:

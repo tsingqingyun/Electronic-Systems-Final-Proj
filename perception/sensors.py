@@ -118,11 +118,18 @@ class EncoderMeter:
     def progress_cm(self) -> float:
         if not self.available:
             return 0.0
+        left_cm, right_cm = self.wheel_progress_cm()
+        return (left_cm + right_cm) / 2.0
+
+    def wheel_progress_cm(self) -> Tuple[float, float]:
+        """Return unsigned left/right wheel travel since the last reset."""
+        if not self.available:
+            return 0.0, 0.0
         with self.lock:
             left = self.left_count - self.left_origin
             right = self.right_count - self.right_origin
-        pulses = (left + right) / 2.0
-        return pulses / self.cfg.ENCODER_PULSES_PER_REV * self.cfg.WHEEL_CIRCUMFERENCE_CM
+        cm_per_pulse = self.cfg.WHEEL_CIRCUMFERENCE_CM / self.cfg.ENCODER_PULSES_PER_REV
+        return left * cm_per_pulse, right * cm_per_pulse
 
     def close(self) -> None:
         for pin in [self.cfg.ENCODER_LEFT, self.cfg.ENCODER_RIGHT]:

@@ -277,10 +277,7 @@ u[k] = u[k-1] + delta_u
 PID is used in:
 
 ```text
-APPROACH_GREEN
-PASS_RED
-PASS_YELLOW
-ORBIT_GREEN
+APPROACH_TARGET
 ```
 
 Approach PID:
@@ -292,157 +289,82 @@ VISION_KD
 VISION_OUTPUT_LIMIT
 ```
 
-Obstacle avoidance PID:
-
-```python
-AVOID_KP
-AVOID_KI
-AVOID_KD
-AVOID_OUTPUT_LIMIT
-```
-
-Orbit PID:
-
-```python
-ORBIT_KP
-ORBIT_KI
-ORBIT_KD
-ORBIT_OUTPUT_LIMIT
-```
-
 ## 7. State Machine
 
 The controller states are:
 
 ```text
-FIND_RED
-PASS_RED
-CLEAR_RED
-FIND_GREEN
-APPROACH_GREEN
-ORBIT_GREEN
-EXIT_GREEN
-FIND_YELLOW
-PASS_YELLOW
-CLEAR_YELLOW
+DRIVE_TO_TARGET
+APPROACH_TARGET
+AVOID_OFFSET_OUT
+AVOID_OUT_ALIGN
+AVOID_PASS
+AVOID_OFFSET_BACK
+AVOID_BACK_ALIGN
+CLEAR_TARGET
+GREEN_ENTRY_TURN
+GREEN_LEG
+GREEN_CORNER_TURN
+GREEN_RESTORE_HEADING
 RECOVERY
 FINISH
 ```
 
-Transitions follow four rules:
+The course target order is:
 
 ```text
-the target must be visually identified
-the condition must hold for consecutive frames
-encoder distance must prove clearance where required
-timeout enters RECOVERY instead of proving completion
+red -> green -> yellow
 ```
 
-### Red Cube
+The car uses one generic loop:
 
 ```text
-FIND_RED
-  red is visible for TARGET_CONFIRM_FRAMES
-  -> PASS_RED
-
-PASS_RED
-  red has been stably seen
-  + red has reached the near zone
-  + red has moved to the expected image edge
-  + red is then missing for TARGET_LOST_FRAMES
-  -> CLEAR_RED
-
-CLEAR_RED
-  drive at CLEAR_V
-  + encoder progress >= RED_CLEAR_CM
-  -> FIND_GREEN
+drive straight
+-> visually center and approach the current color
+-> run the color-specific action
+-> return to the start-finish line
+-> drive straight toward the next color
 ```
 
-The configured red pass side is:
+### Red and Yellow Avoidance
+
+Red and yellow use the same symmetric lane-change template:
+
+```text
+AVOID_OFFSET_OUT
+-> AVOID_OUT_ALIGN
+-> AVOID_PASS
+-> AVOID_OFFSET_BACK
+-> AVOID_BACK_ALIGN
+-> CLEAR_TARGET
+```
+
+The first pair of opposite arcs moves the car to a parallel path beside the
+cube. After the straight pass, the mirrored pair returns the car to the
+original start-finish line with approximately the original heading.
 
 ```python
 RED_PASS_SIDE = "left"
-```
-
-For a left-side pass, the red cube is controlled toward the right edge of the
-camera image.
-
-### Green Cube
-
-```text
-FIND_GREEN
-  green is visible for TARGET_CONFIRM_FRAMES
-  -> APPROACH_GREEN
-```
-
-`APPROACH_GREEN` uses visual PID to center the green cube. Entry to orbit
-requires all of the following for consecutive frames:
-
-```text
-green is visually present
-green is within GREEN_CENTER_TOL_PX of image center
-green area is large enough or ultrasonic distance is close enough
-```
-
-Ultrasonic distance is only supporting evidence here; it cannot identify the
-green cube by itself.
-
-`ORBIT_GREEN` combines:
-
-```text
-fixed tangent turn
-visual PID side-position correction
-ultrasonic distance correction
-```
-
-Orbit completion requires:
-
-```text
-the car has left the starting visual view
-encoder progress >= ORBIT_MIN_PROGRESS_CM
-green cube appears again near the starting cx
-green area ratio is within the configured range
-the complete condition holds for ORBIT_CONFIRM_FRAMES
-```
-
-After a confirmed orbit:
-
-```text
-EXIT_GREEN
-  drive at CLEAR_V
-  + encoder progress >= GREEN_EXIT_CM
-  + green is missing for TARGET_LOST_FRAMES
-  -> FIND_YELLOW
-```
-
-### Yellow Cube
-
-```text
-FIND_YELLOW
-  yellow is visible for TARGET_CONFIRM_FRAMES
-  -> PASS_YELLOW
-
-PASS_YELLOW
-  yellow has been stably seen
-  + yellow has reached the near zone
-  + yellow has moved to the expected image edge
-  + yellow is then missing for TARGET_LOST_FRAMES
-  -> CLEAR_YELLOW
-
-CLEAR_YELLOW
-  drive at CLEAR_V
-  + encoder progress >= YELLOW_CLEAR_CM
-  -> FINISH
-```
-
-The configured yellow pass side is:
-
-```python
 YELLOW_PASS_SIDE = "right"
 ```
 
-For a right-side pass, the yellow cube is controlled toward the left edge of
-the camera image.
+### Green Octagon
+
+The car first centers the green cube and approaches the configured polygon
+radius. A clockwise octagon then runs as:
+
+```text
+turn left about 67.5 degrees
+repeat 8 times:
+  drive one polygon edge
+  turn right about 45 degrees
+turn right about 67.5 degrees to restore the original heading
+```
+
+Each turn uses both wheel encoders and finishes only after both wheels reach
+the calibrated travel. After completing the closed polygon, the green cube is
+still in front of the car, so the generic lane-change template is used once to
+pass it and return to the main line.
 
 ### Recovery
 
@@ -463,14 +385,14 @@ Before executing state-specific logic, the controller checks:
 
 ```python
 if dist_cm < STOP_CM:
-    motor.drive(0.0, emergency_turn_direction)
+    back up slowly while visually approaching
+    otherwise enter RECOVERY
 ```
 
 Meaning:
 
 ```text
-if something is too close, stop forward motion and turn toward the configured
-pass direction for the current course stage
+an unexpected close object never changes an encoder-planned path silently
 ```
 
 Current threshold:
@@ -655,12 +577,13 @@ python3 main.py
 Test one transition at a time:
 
 ```text
-FIND_RED -> PASS_RED
-PASS_RED -> CLEAR_RED
-CLEAR_RED -> FIND_GREEN
-APPROACH_GREEN -> ORBIT_GREEN
-ORBIT_GREEN -> EXIT_GREEN
-PASS_YELLOW -> CLEAR_YELLOW -> FINISH
+DRIVE_TO_TARGET -> APPROACH_TARGET
+APPROACH_TARGET -> AVOID_OFFSET_OUT
+AVOID_OFFSET_OUT -> ... -> CLEAR_TARGET
+APPROACH_TARGET(green) -> GREEN_ENTRY_TURN
+GREEN_LEG <-> GREEN_CORNER_TURN
+GREEN_RESTORE_HEADING -> AVOID_OFFSET_OUT
+CLEAR_TARGET(yellow) -> FINISH
 ```
 
 Stop and fix the first incorrect transition instead of continuing through the

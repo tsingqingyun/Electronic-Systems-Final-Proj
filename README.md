@@ -125,23 +125,20 @@ command, then independent left/right speed PID controllers use encoder feedback
 to correct PWM duty.
 
 ```text
-FIND_RED
-  -> PASS_RED
-  -> CLEAR_RED
-  -> FIND_GREEN
-  -> APPROACH_GREEN
-  -> ORBIT_GREEN
-  -> EXIT_GREEN
-  -> FIND_YELLOW
-  -> PASS_YELLOW
-  -> CLEAR_YELLOW
-  -> FINISH
+DRIVE_TO_TARGET
+  -> APPROACH_TARGET
+  -> red/yellow: symmetric lane-change avoidance
+  -> green: encoder octagon, then symmetric lane-change exit
+  -> CLEAR_TARGET
+  -> next color or FINISH
 ```
 
-Every visual transition requires consecutive-frame confirmation. Passing a
-cube requires evidence that it was seen, approached, moved to the expected
-image edge, and then disappeared for several frames. Encoder distance confirms
-that the whole chassis has cleared the cube.
+The car treats the start-finish direction as the main line. Vision is used
+only while a target is in front: identify it, center it, and establish a
+repeatable approach distance. Encoder-planned arcs then move around red and
+yellow and return to the same line. Green uses an eight-edge polygon with
+encoder-confirmed turns, restores the original heading, then exits around the
+cube and returns to the main line.
 
 Ultrasonic distance never identifies a cube by itself. It is only used as
 supporting evidence while the expected visual target is visible. State timeout

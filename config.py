@@ -70,19 +70,18 @@ class Config:
     TURN_DUTY: float = 22.0
     MIN_DUTY: float = 0.0
     MAX_DUTY: float = 70.0
+    # Calibrate this value with motor_pid_test.py before tuning PID gains.
     MAX_WHEEL_SPEED_CMPS: float = 25.0
     MOTOR_PID_PERIOD_S: float = 0.10
     MOTOR_KP: float = 2.0
-    MOTOR_KI: float = 0.8
-    MOTOR_KD: float = 0.05
+    MOTOR_KI: float = 0.0
+    MOTOR_KD: float = 0.0
     MOTOR_INTEGRAL_LIMIT: float = 20.0
     CRUISE_V: float = 0.55
     SLOW_V: float = 0.30
+    CLEAR_V: float = 0.40
     AVOID_V: float = 0.32
     ORBIT_V: float = 0.34
-    CENTER_K: float = 0.95
-    AVOID_K: float = 1.05
-    ORBIT_SIDE_K: float = 1.10
     ORBIT_DIST_K: float = 0.035
     BOUNDARY_K: float = 0.85
 
@@ -128,8 +127,8 @@ class Config:
     FIND_TARGET_TIMEOUT_S: float = 18.0
     PASS_CUBE_TIMEOUT_S: float = 14.0
     APPROACH_GREEN_TIMEOUT_S: float = 18.0
-    CLEAR_CUBE_TIMEOUT_S: float = 8.0
-    EXIT_GREEN_TIMEOUT_S: float = 10.0
+    CLEAR_CUBE_TIMEOUT_S: float = 20.0
+    EXIT_GREEN_TIMEOUT_S: float = 20.0
 
     # Visual loop-closure settings for orbit completion without a gyro.
     ORBIT_MIN_PROGRESS_CM: float = 80.0

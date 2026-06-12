@@ -76,7 +76,7 @@ class CubeSlalomController:
 
     def run(self) -> None:
         try:
-            while self.state != State.FINISH:
+            while self.state not in {State.FINISH, State.RECOVERY}:
                 self.step()
                 time.sleep(0.04)
         finally:
@@ -229,7 +229,7 @@ class CubeSlalomController:
             return
 
         self.action = f"clear_{color} progress={progress:.1f}/{required_cm:.1f}cm"
-        self.motor.drive(self.cfg.SLOW_V, 0.0)
+        self.motor.drive(self.cfg.CLEAR_V, 0.0)
 
     def _approach_green(self, green: Optional[Blob], dist_cm: float) -> None:
         self._update_visibility(green)
@@ -321,7 +321,7 @@ class CubeSlalomController:
             f"exit_green progress={progress:.1f}/{self.cfg.GREEN_EXIT_CM:.1f}cm "
             f"lost={self.lost_frames}"
         )
-        self.motor.drive(self.cfg.SLOW_V, 0.0)
+        self.motor.drive(self.cfg.CLEAR_V, 0.0)
 
     def _speed_by_distance(self, dist_cm: float) -> float:
         if dist_cm < self.cfg.SLOW_CM:

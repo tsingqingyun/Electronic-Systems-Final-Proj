@@ -53,6 +53,8 @@ class LineGuard:
         self.cfg = cfg
         pins = [p for p in [cfg.LINE_LEFT, cfg.LINE_RIGHT] if p is not None]
         if pins:
+            GPIO.setwarnings(False)
+            GPIO.setmode(GPIO.BCM)
             GPIO.setup(pins, GPIO.IN)
 
     def correction(self) -> Tuple[float, bool]:
@@ -85,6 +87,8 @@ class EncoderMeter:
         if not pins:
             return
         try:
+            GPIO.setwarnings(False)
+            GPIO.setmode(GPIO.BCM)
             GPIO.setup(pins, GPIO.IN)
             if cfg.ENCODER_LEFT is not None:
                 GPIO.add_event_detect(cfg.ENCODER_LEFT, GPIO.RISING, callback=self._on_pulse)

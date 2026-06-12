@@ -31,8 +31,10 @@ repository's `Config`.
 
 ## Run
 
+This project requires Python 3.7 or newer. Always use `python3`, not `python`.
+
 ```bash
-cd /home/pi/workspace/final_proj
+cd /home/pi/workspace/0612_final
 python3 main.py
 ```
 
@@ -43,6 +45,50 @@ python3 gpio_motor_test.py
 ```
 
 Put the car on a stand before running `gpio_motor_test.py`.
+
+## Debug Order
+
+Do not start by running the full course. Debug one layer at a time:
+
+```text
+1. python3 -m compileall -q .
+2. python3 gpio_motor_test.py
+3. python3 motor_pid_test.py
+4. python3 turn_sweep_test.py
+5. python3 vision_test.py
+6. python3 sensor_test.py
+7. python3 main.py
+```
+
+`gpio_motor_test.py` applies PWM directly and checks only wiring, wheel
+polarity, and motor channels. `turn_sweep_test.py` also runs without an
+attached encoder, so it is an open-loop steering baseline.
+
+`motor_pid_test.py` is the dedicated closed-loop test. It attaches the encoder
+to `MotorDriver` and prints:
+
+```text
+target wheel speed
+measured wheel speed
+left/right pulse increments
+left/right PID PWM output
+```
+
+Tune in this order:
+
+```text
+ENCODER_PULSES_PER_REV and WHEEL_CIRCUMFERENCE_CM
+MAX_WHEEL_SPEED_CMPS
+MOTOR_KP
+MOTOR_KI
+MOTOR_KD
+```
+
+Keep the car on a stand for the first PID test. Only perform a low-speed floor
+test after both encoder channels report stable, nonzero pulse counts.
+
+`vision_test.py` and `sensor_test.py` do not initialize the motors. Use them to
+validate perception before allowing the full controller to move the car.
 
 ## Current Hardware Assumptions
 
@@ -106,4 +152,5 @@ that the whole chassis has cleared the cube.
 Ultrasonic distance never identifies a cube by itself. It is only used as
 supporting evidence while the expected visual target is visible. State timeout
 enters `RECOVERY` and stops the car instead of pretending that the state
-completed successfully.
+completed successfully. `RECOVERY` then exits the current run after normal
+motor, sensor, camera, and GPIO cleanup.

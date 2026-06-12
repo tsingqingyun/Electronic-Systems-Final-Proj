@@ -93,12 +93,19 @@ class MotorDriver:
         ``v`` and ``w`` are clamped to [-1, 1]. Positive ``w`` turns left
         and negative ``w`` turns right, matching the existing controller.
         """
+        left, right = self.wheel_commands(v, w)
+        if left == 0.0 and right == 0.0:
+            self.stop()
+            return
+        self._drive_with_speed_pid(left, right)
+
+    def wheel_commands(self, v: float, w: float) -> tuple[float, float]:
+        """Convert normalized chassis commands to signed wheel PWM targets."""
         v = max(-1.0, min(1.0, v))
         w = max(-1.0, min(1.0, w))
 
         if v == 0.0 and w == 0.0:
-            self.stop()
-            return
+            return 0.0, 0.0
 
         turn = self.cfg.TURN_DUTY * w
         if v == 0.0:
@@ -120,7 +127,7 @@ class MotorDriver:
                 left = min(0.0, left)
                 right = min(0.0, right)
 
-        self._drive_with_speed_pid(left, right)
+        return left, right
 
     def _drive_with_speed_pid(self, left: float, right: float) -> None:
         if self.encoder is None or not self.encoder.available:
@@ -138,6 +145,10 @@ class MotorDriver:
             self.last_left_duty = abs(left)
             self.last_right_duty = abs(right)
         else:
+            direction_changed = (
+                left_sign != self.last_left_sign
+                or right_sign != self.last_right_sign
+            )
             if left_sign != self.last_left_sign:
                 self.left_pid.reset()
                 self.last_left_duty = abs(left)
@@ -145,8 +156,14 @@ class MotorDriver:
                 self.right_pid.reset()
                 self.last_right_duty = abs(right)
 
-            dt = now - self.last_pid_time
-            if dt + 1e-9 >= self.cfg.MOTOR_PID_PERIOD_S:
+            if direction_changed:
+                # Unsigned pulses collected before a reversal must not be
+                # interpreted as speed in the new direction.
+                self.last_encoder_counts = counts
+                self.last_pid_time = now
+            else:
+                dt = now - self.last_pid_time
+            if not direction_changed and dt + 1e-9 >= self.cfg.MOTOR_PID_PERIOD_S:
                 previous_left, previous_right = self.last_encoder_counts
                 left_pulses = max(0, counts[0] - previous_left)
                 right_pulses = max(0, counts[1] - previous_right)

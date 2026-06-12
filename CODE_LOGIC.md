@@ -102,6 +102,22 @@ turn_sweep_test.py
 
 Standalone steering sensitivity test. It sweeps multiple turn strengths to help tune `TURN_DUTY`.
 
+```text
+motor_pid_test.py
+```
+
+Interactive closed-loop wheel-speed test. It attaches `EncoderMeter` to
+`MotorDriver` and prints target speed, measured speed, encoder pulses, and PID
+PWM output.
+
+```text
+vision_test.py
+sensor_test.py
+```
+
+Non-driving diagnostics for camera color detection, KS103 distance, and
+left/right encoder counts.
+
 ## 3. GPIO Mapping
 
 Motor pins use BCM numbering.
@@ -341,7 +357,8 @@ PASS_RED
   -> CLEAR_RED
 
 CLEAR_RED
-  encoder progress >= RED_CLEAR_CM
+  drive at CLEAR_V
+  + encoder progress >= RED_CLEAR_CM
   -> FIND_GREEN
 ```
 
@@ -396,7 +413,8 @@ After a confirmed orbit:
 
 ```text
 EXIT_GREEN
-  encoder progress >= GREEN_EXIT_CM
+  drive at CLEAR_V
+  + encoder progress >= GREEN_EXIT_CM
   + green is missing for TARGET_LOST_FRAMES
   -> FIND_YELLOW
 ```
@@ -416,7 +434,8 @@ PASS_YELLOW
   -> CLEAR_YELLOW
 
 CLEAR_YELLOW
-  encoder progress >= YELLOW_CLEAR_CM
+  drive at CLEAR_V
+  + encoder progress >= YELLOW_CLEAR_CM
   -> FINISH
 ```
 
@@ -438,8 +457,9 @@ to prove clearance is unavailable, the controller enters:
 RECOVERY
 ```
 
-`RECOVERY` stops the motors and records the failure reason. Time is used only
-to detect a stuck state; it is not treated as successful task completion.
+`RECOVERY` stops the motors, records the failure reason, exits the main loop,
+and performs normal hardware cleanup. Time is used only to detect a stuck
+state; it is not treated as successful task completion.
 
 ## 8. Ultrasonic Safety
 
@@ -480,16 +500,23 @@ Remote I/O error
 Run from the Raspberry Pi:
 
 ```bash
-cd /home/pi/workspace/final_proj
+cd /home/pi/workspace/0612_final
 ```
 
-Syntax check:
+### Stage 1: Static Check
+
+Run before every hardware test:
 
 ```bash
-python3 -m compileall -q control motion perception config.py main.py gpio_motor_test.py turn_sweep_test.py
+python3 -m compileall -q .
 ```
 
-Motor wiring test:
+This verifies Python syntax and imports. It does not prove that GPIO, I2C,
+camera, or encoders work.
+
+### Stage 2: Motor Wiring
+
+Put the car on a stand:
 
 ```bash
 python3 gpio_motor_test.py
@@ -505,17 +532,143 @@ right backward
 both forward
 ```
 
-Steering sensitivity test:
+This script applies PWM directly. It intentionally bypasses encoders and motor
+PID. Do not tune PID until all five actions match the physical wheels.
+
+If a wheel direction is wrong, fix:
+
+```python
+LEFT_MOTOR_FORWARD_HIGH
+RIGHT_MOTOR_FORWARD_HIGH
+```
+
+Do not compensate for reversed wiring by changing PID gains.
+
+### Stage 3: Encoder and Motor PID
+
+Keep the car on a stand for the first run:
+
+```bash
+python3 motor_pid_test.py
+```
+
+Each case waits for Enter and prints:
+
+```text
+target=(left,right) cm/s
+measured=(left,right) cm/s
+pulses=(left,right)
+pwm=(left,right)
+```
+
+Check the output in this order:
+
+```text
+both pulse counts increase
+left wheel changes the left count
+right wheel changes the right count
+measured speeds are physically plausible
+PID PWM settles instead of staying at a limit
+```
+
+Common symptoms:
+
+```text
+wheel moves but pulses stay at zero
+  -> check GPIO6/GPIO12 wiring and EncoderMeter.available
+
+left wheel changes the right count
+  -> swap ENCODER_LEFT/ENCODER_RIGHT assignments or encoder wiring
+
+measured speed is consistently scaled wrong
+  -> calibrate ENCODER_PULSES_PER_REV and WHEEL_CIRCUMFERENCE_CM
+
+measured speed is correct but target scale is wrong
+  -> calibrate MAX_WHEEL_SPEED_CMPS
+
+PWM immediately oscillates
+  -> reduce MOTOR_KP, set MOTOR_KI and MOTOR_KD near zero
+
+steady speed stays below target
+  -> add MOTOR_KI gradually after MOTOR_KP is stable
+
+PWM jumps because pulse readings are noisy
+  -> keep MOTOR_KD small or zero; consider increasing MOTOR_PID_PERIOD_S
+```
+
+Recommended tuning sequence:
+
+```text
+1. Set MOTOR_KI = 0 and MOTOR_KD = 0.
+2. Measure real wheel speed and calibrate MAX_WHEEL_SPEED_CMPS.
+3. Increase MOTOR_KP until correction is responsive but not oscillatory.
+4. Add a small MOTOR_KI to remove steady error.
+5. Add MOTOR_KD only if there is a clear benefit.
+```
+
+### Stage 4: Steering
+
+`turn_sweep_test.py` does not attach the encoder, so it is an open-loop
+steering baseline:
 
 ```bash
 python3 turn_sweep_test.py
 ```
 
-Main program:
+Use it to verify turn direction and choose a reasonable `TURN_DUTY`. Then
+repeat the left/right cases in `motor_pid_test.py` to inspect closed-loop wheel
+behavior.
+
+### Stage 5: Vision
+
+Run without initializing the motors:
+
+```bash
+python3 vision_test.py
+```
+
+Verify red, green, and yellow detections separately. Check that the bounding
+box is stable and that small reflections do not exceed `MIN_BLOB_AREA`.
+
+### Stage 6: Sensors
+
+Run without initializing the motors:
+
+```bash
+python3 sensor_test.py
+```
+
+Move an object in front of the KS103 and rotate each wheel by hand. Confirm:
+
+```text
+KS103 distance changes when an object moves
+both encoder counts increase independently
+progress_cm increases during forward travel
+```
+
+The controller log should report plausible `dist` and `enc` values.
+
+### Stage 7: State Machine
+
+Raise the drive wheels or use a large clear test area:
 
 ```bash
 python3 main.py
 ```
+
+Test one transition at a time:
+
+```text
+FIND_RED -> PASS_RED
+PASS_RED -> CLEAR_RED
+CLEAR_RED -> FIND_GREEN
+APPROACH_GREEN -> ORBIT_GREEN
+ORBIT_GREEN -> EXIT_GREEN
+PASS_YELLOW -> CLEAR_YELLOW -> FINISH
+```
+
+Stop and fix the first incorrect transition instead of continuing through the
+whole course.
 
 ## 10. Runtime Logs
 
@@ -536,4 +689,6 @@ seen    detected cube colors and positions
 action  current control action
 ```
 
-Use these logs to tune color thresholds, steering gains, and orbit completion parameters.
+Use these logs to tune color thresholds, steering gains, and state completion
+parameters. Motor PID details are printed by `motor_pid_test.py`, not by the
+normal controller log.

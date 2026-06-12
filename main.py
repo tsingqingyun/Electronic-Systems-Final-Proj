@@ -16,7 +16,10 @@ from control import CubeSlalomController
 def main() -> None:
     cfg = Config()
     robot = CubeSlalomController(cfg)
-    robot.run()
+    try:
+        robot.run()
+    except KeyboardInterrupt:
+        print("\nStopped by user.")
 
 
 if __name__ == "__main__":

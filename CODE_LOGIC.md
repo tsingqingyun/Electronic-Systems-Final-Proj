@@ -21,7 +21,6 @@ camera
 KS103 ultrasonic sensor
 left/right motor control
 left/right wheel encoder signals
-no MPU6050 gyro
 no line sensor in this code
 ```
 
@@ -86,9 +85,6 @@ The perception layer contains camera color recognition and sensor helpers:
 - KS103 ultrasonic reader
 - encoder progress meter
 - optional line guard
-- optional MPU6050 gyro reader
-
-The gyro path is present but disabled because this car does not have a gyro.
 
 ```text
 gpio_motor_test.py
@@ -399,7 +395,7 @@ visual PID side-position correction
 ultrasonic distance correction
 ```
 
-Without a gyro, orbit completion requires:
+Orbit completion requires:
 
 ```text
 the car has left the starting visual view
@@ -675,7 +671,7 @@ whole course.
 When `DEBUG_LOG = True`, the controller prints:
 
 ```text
-state=... dist=... yaw=... enc=... seen=[...] action=...
+state=... dist=... enc=... seen=[...] action=...
 ```
 
 Fields:
@@ -683,7 +679,6 @@ Fields:
 ```text
 state   current state-machine state
 dist    ultrasonic distance in cm
-yaw     gyro yaw, usually 0 because gyro is disabled
 enc     encoder-estimated progress in cm
 seen    detected cube colors and positions
 action  current control action

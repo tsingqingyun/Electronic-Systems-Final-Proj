@@ -19,7 +19,7 @@ motion/
   differential drive, visual steering PID, and per-wheel speed PID
 
 perception/
-  camera, ultrasonic, encoders, line guard, and optional gyro
+  camera, ultrasonic, encoders, and line guard
 
 config.py
   the single source of truth for GPIO pins and tuning parameters
@@ -113,13 +113,7 @@ B1A -> GPIO6   -> left/B motor speed
 B2A -> GPIO12  -> right/A motor speed
 ```
 
-No MPU6050 gyro is installed:
-
-```python
-USE_GYRO = False
-```
-
-Orbit completion therefore uses visual loop closure plus encoder progress.
+Orbit completion uses visual loop closure plus encoder progress.
 The same cumulative encoder counts also provide left/right speed feedback;
 task-distance resets do not clear the motor PID counters.
 

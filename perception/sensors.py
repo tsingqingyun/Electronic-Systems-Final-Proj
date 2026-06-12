@@ -5,7 +5,7 @@ Function:
 Sensor drivers and low-level sensor helpers.
 
 This file contains the KS103 ultrasonic reader, optional line/boundary
-guard, wheel encoder progress meter, and optional MPU6050 gyro reader.
+guard, and wheel encoder progress meter.
 """
 
 from __future__ import annotations
@@ -132,54 +132,3 @@ class EncoderMeter:
                 GPIO.remove_event_detect(pin)
             except RuntimeError:
                 pass
-
-
-class GyroYaw:
-    def __init__(self, cfg: Config) -> None:
-        self.cfg = cfg
-        self.bus = None
-        self.available = False
-        self.bias_z = 0.0
-        self.yaw_deg = 0.0
-        self.last_t = time.time()
-        if not cfg.USE_GYRO:
-            return
-        try:
-            self.bus = smbus.SMBus(cfg.I2C_BUS)
-            self.bus.write_byte_data(cfg.MPU_ADDR, 0x6B, 0x00)
-            time.sleep(0.1)
-            self.bias_z = self._calibrate_z()
-            self.available = True
-        except OSError:
-            self.available = False
-
-    def reset(self) -> None:
-        self.yaw_deg = 0.0
-        self.last_t = time.time()
-
-    def update(self) -> float:
-        if not self.available:
-            return self.yaw_deg
-        now = time.time()
-        dt = now - self.last_t
-        self.last_t = now
-        gz = self._read_word_signed(0x47) / self.cfg.GYRO_Z_SCALE - self.bias_z
-        self.yaw_deg += gz * dt
-        return self.yaw_deg
-
-    def close(self) -> None:
-        if self.bus is not None:
-            self.bus.close()
-
-    def _calibrate_z(self, n: int = 120) -> float:
-        vals = []
-        for _ in range(n):
-            vals.append(self._read_word_signed(0x47) / self.cfg.GYRO_Z_SCALE)
-            time.sleep(0.005)
-        return sum(vals) / len(vals)
-
-    def _read_word_signed(self, reg: int) -> int:
-        high = self.bus.read_byte_data(self.cfg.MPU_ADDR, reg)
-        low = self.bus.read_byte_data(self.cfg.MPU_ADDR, reg + 1)
-        val = (high << 8) + low
-        return val - 65536 if val >= 0x8000 else val

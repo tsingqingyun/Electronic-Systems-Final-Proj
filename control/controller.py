@@ -19,7 +19,7 @@ import RPi.GPIO as GPIO
 
 from config import Config
 from motion import IncrementalPID, MotorDriver
-from perception import Blob, ColorCamera, EncoderMeter, GyroYaw, LineGuard, UltrasonicKS103
+from perception import Blob, ColorCamera, EncoderMeter, LineGuard, UltrasonicKS103
 
 
 class State(Enum):
@@ -45,7 +45,6 @@ class CubeSlalomController:
         self.line = LineGuard(cfg)
         self.encoder = EncoderMeter(cfg)
         self.motor.attach_encoder(self.encoder)
-        self.gyro = GyroYaw(cfg)
         self.camera = ColorCamera(cfg)
         self.state = State.FIND_RED
         self.state_t0 = time.time()
@@ -85,7 +84,6 @@ class CubeSlalomController:
     def step(self) -> None:
         blobs = self.camera.detect()
         dist_cm = self.ultra.read_cm()
-        yaw = self.gyro.update()
         now = time.time()
         for color, blob in blobs.items():
             if blob is not None:
@@ -94,27 +92,27 @@ class CubeSlalomController:
         if self.state == State.RECOVERY:
             self.action = f"recovery_stop reason={self.failure_reason}"
             self.motor.stop()
-            self._log(blobs, dist_cm, yaw)
+            self._log(blobs, dist_cm)
             return
 
         timeout_limit = self._state_timeout_limit()
         if timeout_limit is not None and self._timed_out(timeout_limit):
             self._recover(f"{self.state.name.lower()}_timeout")
-            self._log(blobs, dist_cm, yaw)
+            self._log(blobs, dist_cm)
             return
 
         if dist_cm < self.cfg.STOP_CM:
             turn_w = self._emergency_turn(blobs)
             self.action = f"too_close_turn w={turn_w:.2f}"
             self.motor.drive(0.0, turn_w)
-            self._log(blobs, dist_cm, yaw)
+            self._log(blobs, dist_cm)
             return
 
         line_w, line_hit = self.line.correction()
         if line_hit:
             self.action = f"line_guard w={line_w:.2f}"
             self.motor.drive(0.18, line_w)
-            self._log(blobs, dist_cm, yaw)
+            self._log(blobs, dist_cm)
             return
 
         if self.state == State.FIND_RED:
@@ -128,7 +126,7 @@ class CubeSlalomController:
         elif self.state == State.APPROACH_GREEN:
             self._approach_green(blobs["green"], dist_cm)
         elif self.state == State.ORBIT_GREEN:
-            self._orbit_green(blobs["green"], dist_cm, yaw)
+            self._orbit_green(blobs["green"], dist_cm)
         elif self.state == State.EXIT_GREEN:
             self._exit_green(blobs["green"])
         elif self.state == State.FIND_YELLOW:
@@ -138,7 +136,7 @@ class CubeSlalomController:
         elif self.state == State.CLEAR_YELLOW:
             self._clear_cube("yellow", self.cfg.YELLOW_CLEAR_CM, State.FINISH)
 
-        self._log(blobs, dist_cm, yaw)
+        self._log(blobs, dist_cm)
 
     def _find_target(self, color: str, target: Optional[Blob], next_state: State) -> None:
         self._update_visibility(target)
@@ -272,9 +270,9 @@ class CubeSlalomController:
         if self._timed_out(self.cfg.APPROACH_GREEN_TIMEOUT_S):
             self._recover("approach_green_timeout")
 
-    def _orbit_green(self, green: Optional[Blob], dist_cm: float, yaw: float) -> None:
-        if not self.gyro.available and not self.encoder.available:
-            self._recover("orbit_completion_sensor_unavailable")
+    def _orbit_green(self, green: Optional[Blob], dist_cm: float) -> None:
+        if not self.encoder.available:
+            self._recover("orbit_encoder_unavailable")
             return
 
         clockwise = self.cfg.ORBIT_DIRECTION == "clockwise"
@@ -290,13 +288,12 @@ class CubeSlalomController:
             dist_err = self._orbit_distance_error(dist_cm)
             tangent_w = -0.38 if clockwise else 0.38
             w = tangent_w + self.orbit_pid.update(side_err) + dist_err
-            self.action = f"orbit_green cx={green.cx:.0f} w={self._clip_unit(w):.2f} yaw={yaw:.0f}"
+            self.action = f"orbit_green cx={green.cx:.0f} w={self._clip_unit(w):.2f}"
             self.motor.drive(self.cfg.ORBIT_V, self._clip_unit(w))
 
-        gyro_done = self.gyro.available and abs(yaw) >= self.cfg.ORBIT_TARGET_DEG
-        visual_done = not self.gyro.available and self._visual_orbit_condition(green)
+        visual_done = self._visual_orbit_condition(green)
         self.completion_frames = self.completion_frames + 1 if visual_done else 0
-        if gyro_done or self.completion_frames >= self.cfg.ORBIT_CONFIRM_FRAMES:
+        if self.completion_frames >= self.cfg.ORBIT_CONFIRM_FRAMES:
             self.set_state(State.EXIT_GREEN)
             return
         if self._timed_out(self.cfg.ORBIT_TIMEOUT_S):
@@ -390,7 +387,6 @@ class CubeSlalomController:
         if state in {State.CLEAR_RED, State.ORBIT_GREEN, State.EXIT_GREEN, State.CLEAR_YELLOW}:
             self.encoder.reset()
         if state == State.ORBIT_GREEN:
-            self.gyro.reset()
             self.orbit_start_t = time.time()
         if state in {State.RECOVERY, State.FINISH}:
             self.motor.stop()
@@ -447,7 +443,7 @@ class CubeSlalomController:
     def _clip_unit(x: float) -> float:
         return max(-1.0, min(1.0, x))
 
-    def _log(self, blobs: Dict[str, Optional[Blob]], dist_cm: float, yaw: float) -> None:
+    def _log(self, blobs: Dict[str, Optional[Blob]], dist_cm: float) -> None:
         if not self.cfg.DEBUG_LOG:
             return
         now = time.time()
@@ -461,7 +457,7 @@ class CubeSlalomController:
                 seen.append(f"{color}:cx={blob.cx:.0f},area={blob.area:.0f}")
         seen_text = "; ".join(seen) if seen else "none"
         print(
-            f"state={self.state.name} dist={dist_cm:.1f}cm yaw={yaw:.0f} "
+            f"state={self.state.name} dist={dist_cm:.1f}cm "
             f"enc={self.encoder.progress_cm():.1f}cm seen=[{seen_text}] action={self.action}"
         )
 
@@ -470,5 +466,4 @@ class CubeSlalomController:
         self.camera.close()
         self.ultra.close()
         self.encoder.close()
-        self.gyro.close()
         GPIO.cleanup()

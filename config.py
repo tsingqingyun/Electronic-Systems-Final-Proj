@@ -49,11 +49,6 @@ class Config:
     GREEN_ORBIT_MIN_CM: float = 15.0
     GREEN_ORBIT_MAX_CM: float = 34.0
 
-    # Optional MPU6050 gyro. This car currently does not have one.
-    USE_GYRO: bool = False
-    MPU_ADDR: int = 0x68
-    GYRO_Z_SCALE: float = 131.0
-
     # Camera and vision.
     CAM_INDEX: int = 0
     FRAME_W: int = 640
@@ -105,7 +100,6 @@ class Config:
     RED_PASS_SIDE: str = "left"
     YELLOW_PASS_SIDE: str = "right"
     ORBIT_DIRECTION: str = "clockwise"
-    ORBIT_TARGET_DEG: float = 360.0
     ORBIT_TIMEOUT_S: float = 16.0
 
     # State-transition confirmation. A transition is never based on one frame.
@@ -130,7 +124,7 @@ class Config:
     CLEAR_CUBE_TIMEOUT_S: float = 20.0
     EXIT_GREEN_TIMEOUT_S: float = 20.0
 
-    # Visual loop-closure settings for orbit completion without a gyro.
+    # Visual loop-closure settings for orbit completion.
     ORBIT_MIN_PROGRESS_CM: float = 80.0
     ORBIT_LOOP_CX_TOL: float = 75.0
     ORBIT_LOOP_AREA_MIN_RATIO: float = 0.45
